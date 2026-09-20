@@ -6,6 +6,13 @@
   "module": "dist/esm/index.js",
   "types": "dist/esm/index.d.ts",
   "scripts": {
+    "verify": "npm run verify:ios && npm run verify:android && npm run verify:web",
+    "verify:ios": "CAPACITOR_IOS_PATH=${CAPACITOR_IOS_PATH:-$(node -p \"require('path').dirname(require.resolve('@capacitor/ios/package.json'))\")} xcodebuild -scheme CapacitorCommunityGoogleMaps -destination generic/platform=iOS",
+    "verify:android": "cd android && ./gradlew clean build test && cd ..",
+    "verify:web": "npm run build",
+    "lint": "npm run ktlint",
+    "fmt": "npm run ktlint -- --format",
+    "ktlint": "ktlint \"android/src/**/*.kt\"",
     "docgen": "docgen --api CapacitorGoogleMapsPlugin --output-readme ./docs/api.md",
     "build": "npm run clean && tsc",
     "clean": "rimraf ./dist",
