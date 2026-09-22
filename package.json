@@ -23,10 +23,10 @@
   "author": "@capacitor-community",
   "license": "MIT",
   "devDependencies": {
-    "@capacitor/android": "^8.0.0",
-    "@capacitor/core": "^8.0.0",
+    "@capacitor/android": "https://github.com/linuxul/capacitor/releases/download/8.5.3/capacitor-android-8.5.3.tgz",
+    "@capacitor/core": "https://github.com/linuxul/capacitor/releases/download/8.5.3/capacitor-core-8.5.3.tgz",
     "@capacitor/docgen": "^0.3.1",
-    "@capacitor/ios": "^8.0.0",
+    "@capacitor/ios": "https://github.com/linuxul/capacitor/releases/download/8.5.3/capacitor-ios-8.5.3.tgz",
     "all-contributors-cli": "^6.20.0",
     "rimraf": "^6.1.0",
     "typescript": "^5.9.3"
