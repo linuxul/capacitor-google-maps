@@ -9,32 +9,34 @@ public class CapacitorGoogleMaps: CustomMapViewEvents, CAPBridgedPlugin {
 
     public let jsName = "CapacitorGoogleMaps"
 
+    // Every method stays synchronous on the bridge queue. The map operations hop to the main queue in the order
+    // JavaScript called them, which keeps the operations on a map ordered; async methods would not wait for each other.
     public let pluginMethods: [CAPPluginMethod] = [
-         CAPPluginMethod(name: "initialize", returnType: .promise),
-         CAPPluginMethod(name: "createMap", returnType: .promise),
-         CAPPluginMethod(name: "updateMap", returnType: .promise),
-         CAPPluginMethod(name: "clearMap", returnType: .none),
-         CAPPluginMethod(name: "removeMap", returnType: .promise),
-         CAPPluginMethod(name: "moveCamera", returnType: .promise),
-         CAPPluginMethod(name: "addMarker", returnType: .promise),
-         CAPPluginMethod(name: "addMarkers", returnType: .promise),
-         CAPPluginMethod(name: "removeMarker", returnType: .promise),
-         CAPPluginMethod(name: "addPolygon", returnType: .promise),
-         CAPPluginMethod(name: "removePolygon", returnType: .promise),
-         CAPPluginMethod(name: "didTapInfoWindow", returnType: .callback),
-         CAPPluginMethod(name: "didCloseInfoWindow", returnType: .callback),
-         CAPPluginMethod(name: "didTapMap", returnType: .callback),
-         CAPPluginMethod(name: "didLongPressMap", returnType: .callback),
-         CAPPluginMethod(name: "didTapMarker", returnType: .callback),
-         CAPPluginMethod(name: "didBeginDraggingMarker", returnType: .callback),
-         CAPPluginMethod(name: "didDragMarker", returnType: .callback),
-         CAPPluginMethod(name: "didEndDraggingMarker", returnType: .callback),
-         CAPPluginMethod(name: "didTapMyLocationButton", returnType: .callback),
-         CAPPluginMethod(name: "didTapMyLocationDot", returnType: .callback),
-         CAPPluginMethod(name: "didTapPoi", returnType: .callback),
-         CAPPluginMethod(name: "didBeginMovingCamera", returnType: .callback),
-         CAPPluginMethod(name: "didMoveCamera", returnType: .callback),
-         CAPPluginMethod(name: "didEndMovingCamera", returnType: .callback),
+         .promise("initialize", CapacitorGoogleMaps.initialize),
+         .promise("createMap", CapacitorGoogleMaps.createMap),
+         .promise("updateMap", CapacitorGoogleMaps.updateMap),
+         .none("clearMap", CapacitorGoogleMaps.clearMap),
+         .promise("removeMap", CapacitorGoogleMaps.removeMap),
+         .promise("moveCamera", CapacitorGoogleMaps.moveCamera),
+         .promise("addMarker", CapacitorGoogleMaps.addMarker),
+         .promise("addMarkers", CapacitorGoogleMaps.addMarkers),
+         .promise("removeMarker", CapacitorGoogleMaps.removeMarker),
+         .promise("addPolygon", CapacitorGoogleMaps.addPolygon),
+         .promise("removePolygon", CapacitorGoogleMaps.removePolygon),
+         .callback("didTapInfoWindow", CapacitorGoogleMaps.didTapInfoWindow),
+         .callback("didCloseInfoWindow", CapacitorGoogleMaps.didCloseInfoWindow),
+         .callback("didTapMap", CapacitorGoogleMaps.didTapMap),
+         .callback("didLongPressMap", CapacitorGoogleMaps.didLongPressMap),
+         .callback("didTapMarker", CapacitorGoogleMaps.didTapMarker),
+         .callback("didBeginDraggingMarker", CapacitorGoogleMaps.didBeginDraggingMarker),
+         .callback("didDragMarker", CapacitorGoogleMaps.didDragMarker),
+         .callback("didEndDraggingMarker", CapacitorGoogleMaps.didEndDraggingMarker),
+         .callback("didTapMyLocationButton", CapacitorGoogleMaps.didTapMyLocationButton),
+         .callback("didTapMyLocationDot", CapacitorGoogleMaps.didTapMyLocationDot),
+         .callback("didTapPoi", CapacitorGoogleMaps.didTapPoi),
+         .callback("didBeginMovingCamera", CapacitorGoogleMaps.didBeginMovingCamera),
+         .callback("didMoveCamera", CapacitorGoogleMaps.didMoveCamera),
+         .callback("didEndMovingCamera", CapacitorGoogleMaps.didEndMovingCamera),
      ]
 
     var GOOGLE_MAPS_KEY: String = "";
@@ -45,12 +47,13 @@ public class CapacitorGoogleMaps: CustomMapViewEvents, CAPBridgedPlugin {
 
     var customWebView: CustomWKWebView?
 
-    @objc func initialize(_ call: CAPPluginCall) {
+    // Synchronous: the SDK must have its key before any map is created, and the reset of the map views below is
+    // queued on the main queue ahead of the work of the calls that follow.
+    func initialize(_ call: CAPPluginCall) throws {
         self.GOOGLE_MAPS_KEY = call.getString("key", "")
 
         if self.GOOGLE_MAPS_KEY.isEmpty {
-            call.reject("GOOGLE MAPS API key missing!")
-            return
+            throw CAPPluginError("GOOGLE MAPS API key missing!")
         }
 
         GMSServices.provideAPIKey(self.GOOGLE_MAPS_KEY)
@@ -74,7 +77,7 @@ public class CapacitorGoogleMaps: CustomMapViewEvents, CAPBridgedPlugin {
         ])
     }
 
-    @objc func createMap(_ call: CAPPluginCall) {
+    func createMap(_ call: CAPPluginCall) {
         DispatchQueue.main.async {
             let customMapView : CustomMapView = CustomMapView(customMapViewEvents: self)
 
@@ -116,7 +119,7 @@ public class CapacitorGoogleMaps: CustomMapViewEvents, CAPBridgedPlugin {
         }
     }
 
-    @objc func updateMap(_ call: CAPPluginCall) {
+    func updateMap(_ call: CAPPluginCall) {
         let mapId: String = call.getString("mapId", "")
 
         DispatchQueue.main.async {
@@ -136,7 +139,7 @@ public class CapacitorGoogleMaps: CustomMapViewEvents, CAPBridgedPlugin {
     }
 
 
-    @objc func removeMap(_ call: CAPPluginCall) {
+    func removeMap(_ call: CAPPluginCall) {
         let mapId: String = call.getString("mapId", "")
 
         DispatchQueue.main.async {
@@ -152,7 +155,7 @@ public class CapacitorGoogleMaps: CustomMapViewEvents, CAPBridgedPlugin {
         }
     }
 
-    @objc func getMap(_ call: CAPPluginCall) {
+    func getMap(_ call: CAPPluginCall) {
         let mapId: String = call.getString("mapId", "")
 
         DispatchQueue.main.async {
@@ -168,7 +171,7 @@ public class CapacitorGoogleMaps: CustomMapViewEvents, CAPBridgedPlugin {
 
     }
 
-    @objc func clearMap(_ call: CAPPluginCall) {
+    func clearMap(_ call: CAPPluginCall) {
         let mapId: String = call.getString("mapId", "")
 
         DispatchQueue.main.async {
@@ -177,14 +180,14 @@ public class CapacitorGoogleMaps: CustomMapViewEvents, CAPBridgedPlugin {
                 return
             }
 
-            let result = customMapView.clearMap()
+            customMapView.clearMap()
 
             call.resolve()
         }
 
     }
 
-    @objc func moveCamera(_ call: CAPPluginCall) {
+    func moveCamera(_ call: CAPPluginCall) {
         let mapId: String = call.getString("mapId", "")
 
         DispatchQueue.main.async {
@@ -214,7 +217,7 @@ public class CapacitorGoogleMaps: CustomMapViewEvents, CAPBridgedPlugin {
         }
     }
 
-    @objc func addMarker(_ call: CAPPluginCall) {
+    func addMarker(_ call: CAPPluginCall) {
         let mapId: String = call.getString("mapId", "")
 
         DispatchQueue.main.async {
@@ -235,12 +238,11 @@ public class CapacitorGoogleMaps: CustomMapViewEvents, CAPBridgedPlugin {
         }
     }
 
-    @objc func addMarkers(_ call: CAPPluginCall) {
+    func addMarkers(_ call: CAPPluginCall) throws {
         let mapId: String = call.getString("mapId", "")
 
         guard let customMapView = self.customWebView?.customMapViews[mapId] else {
-            call.reject("map not found")
-            return
+            throw CAPPluginError("map not found")
         }
 
         if let markers = call.getArray("markers")?.capacitor.replacingNullValues() as? [JSObject?] {
@@ -317,7 +319,7 @@ public class CapacitorGoogleMaps: CustomMapViewEvents, CAPBridgedPlugin {
         call.resolve()
     }
 
-    @objc func removeMarker(_ call: CAPPluginCall) {
+    func removeMarker(_ call: CAPPluginCall) {
         let markerId: String = call.getString("markerId", "");
 
         DispatchQueue.main.async {
@@ -333,7 +335,7 @@ public class CapacitorGoogleMaps: CustomMapViewEvents, CAPBridgedPlugin {
         }
     }
 
-    @objc func addPolygon(_ call: CAPPluginCall) {
+    func addPolygon(_ call: CAPPluginCall) {
         let mapId: String = call.getString("mapId", "");
 
         DispatchQueue.main.async {
@@ -355,7 +357,7 @@ public class CapacitorGoogleMaps: CustomMapViewEvents, CAPBridgedPlugin {
         }
     }
 
-    @objc func removePolygon(_ call: CAPPluginCall) {
+    func removePolygon(_ call: CAPPluginCall) {
         let polygonId: String = call.getString("polygonId", "");
 
         DispatchQueue.main.async {
@@ -370,68 +372,67 @@ public class CapacitorGoogleMaps: CustomMapViewEvents, CAPBridgedPlugin {
         }
     }
 
-    @objc func didTapInfoWindow(_ call: CAPPluginCall) {
-        setCallbackIdForEvent(call: call, eventName: CustomMapView.EVENT_DID_TAP_INFO_WINDOW);
+    func didTapInfoWindow(_ call: CAPPluginCall) throws {
+        try setCallbackIdForEvent(call: call, eventName: CustomMapView.EVENT_DID_TAP_INFO_WINDOW);
     }
 
-    @objc func didCloseInfoWindow(_ call: CAPPluginCall) {
-        setCallbackIdForEvent(call: call, eventName: CustomMapView.EVENT_DID_CLOSE_INFO_WINDOW);
+    func didCloseInfoWindow(_ call: CAPPluginCall) throws {
+        try setCallbackIdForEvent(call: call, eventName: CustomMapView.EVENT_DID_CLOSE_INFO_WINDOW);
     }
 
-    @objc func didTapMap(_ call: CAPPluginCall) {
-        setCallbackIdForEvent(call: call, eventName: CustomMapView.EVENT_DID_TAP_MAP);
+    func didTapMap(_ call: CAPPluginCall) throws {
+        try setCallbackIdForEvent(call: call, eventName: CustomMapView.EVENT_DID_TAP_MAP);
     }
 
-    @objc func didLongPressMap(_ call: CAPPluginCall) {
-        setCallbackIdForEvent(call: call, eventName: CustomMapView.EVENT_DID_LONG_PRESS_MAP);
+    func didLongPressMap(_ call: CAPPluginCall) throws {
+        try setCallbackIdForEvent(call: call, eventName: CustomMapView.EVENT_DID_LONG_PRESS_MAP);
     }
 
-    @objc func didTapMarker(_ call: CAPPluginCall) {
-        setCallbackIdForEvent(call: call, eventName: CustomMapView.EVENT_DID_TAP_MARKER);
+    func didTapMarker(_ call: CAPPluginCall) throws {
+        try setCallbackIdForEvent(call: call, eventName: CustomMapView.EVENT_DID_TAP_MARKER);
     }
 
-    @objc func didBeginDraggingMarker(_ call: CAPPluginCall) {
-        setCallbackIdForEvent(call: call, eventName: CustomMapView.EVENT_DID_BEGIN_DRAGGING_MARKER);
+    func didBeginDraggingMarker(_ call: CAPPluginCall) throws {
+        try setCallbackIdForEvent(call: call, eventName: CustomMapView.EVENT_DID_BEGIN_DRAGGING_MARKER);
     }
 
-    @objc func didDragMarker(_ call: CAPPluginCall) {
-        setCallbackIdForEvent(call: call, eventName: CustomMapView.EVENT_DID_DRAG_MARKER);
+    func didDragMarker(_ call: CAPPluginCall) throws {
+        try setCallbackIdForEvent(call: call, eventName: CustomMapView.EVENT_DID_DRAG_MARKER);
     }
 
-    @objc func didEndDraggingMarker(_ call: CAPPluginCall) {
-        setCallbackIdForEvent(call: call, eventName: CustomMapView.EVENT_DID_END_DRAGGING_MARKER);
+    func didEndDraggingMarker(_ call: CAPPluginCall) throws {
+        try setCallbackIdForEvent(call: call, eventName: CustomMapView.EVENT_DID_END_DRAGGING_MARKER);
     }
 
-    @objc func didTapMyLocationButton(_ call: CAPPluginCall) {
-        setCallbackIdForEvent(call: call, eventName: CustomMapView.EVENT_DID_TAP_MY_LOCATION_BUTTON);
+    func didTapMyLocationButton(_ call: CAPPluginCall) throws {
+        try setCallbackIdForEvent(call: call, eventName: CustomMapView.EVENT_DID_TAP_MY_LOCATION_BUTTON);
     }
 
-    @objc func didTapMyLocationDot(_ call: CAPPluginCall) {
-        setCallbackIdForEvent(call: call, eventName: CustomMapView.EVENT_DID_TAP_MY_LOCATION_DOT);
+    func didTapMyLocationDot(_ call: CAPPluginCall) throws {
+        try setCallbackIdForEvent(call: call, eventName: CustomMapView.EVENT_DID_TAP_MY_LOCATION_DOT);
     }
 
-    @objc func didTapPoi(_ call: CAPPluginCall) {
-        setCallbackIdForEvent(call: call, eventName: CustomMapView.EVENT_DID_TAP_POI);
+    func didTapPoi(_ call: CAPPluginCall) throws {
+        try setCallbackIdForEvent(call: call, eventName: CustomMapView.EVENT_DID_TAP_POI);
     }
 
-    @objc func didBeginMovingCamera(_ call: CAPPluginCall) {
-        setCallbackIdForEvent(call: call, eventName: CustomMapView.EVENT_DID_BEGIN_MOVING_CAMERA);
+    func didBeginMovingCamera(_ call: CAPPluginCall) throws {
+        try setCallbackIdForEvent(call: call, eventName: CustomMapView.EVENT_DID_BEGIN_MOVING_CAMERA);
     }
 
-    @objc func didMoveCamera(_ call: CAPPluginCall) {
-        setCallbackIdForEvent(call: call, eventName: CustomMapView.EVENT_DID_MOVE_CAMERA);
+    func didMoveCamera(_ call: CAPPluginCall) throws {
+        try setCallbackIdForEvent(call: call, eventName: CustomMapView.EVENT_DID_MOVE_CAMERA);
     }
 
-    @objc func didEndMovingCamera(_ call: CAPPluginCall) {
-        setCallbackIdForEvent(call: call, eventName: CustomMapView.EVENT_DID_END_MOVING_CAMERA);
+    func didEndMovingCamera(_ call: CAPPluginCall) throws {
+        try setCallbackIdForEvent(call: call, eventName: CustomMapView.EVENT_DID_END_MOVING_CAMERA);
     }
 
-    func setCallbackIdForEvent(call: CAPPluginCall, eventName: String) {
+    func setCallbackIdForEvent(call: CAPPluginCall, eventName: String) throws {
         let mapId: String = call.getString("mapId", "")
 
         guard let customMapView = self.customWebView?.customMapViews[mapId] else {
-            call.reject("map not found")
-            return
+            throw CAPPluginError("map not found")
         }
 
         call.keepAlive = true;
