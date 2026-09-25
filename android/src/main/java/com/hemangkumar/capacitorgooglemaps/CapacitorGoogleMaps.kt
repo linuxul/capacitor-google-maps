@@ -10,7 +10,9 @@ import com.getcapacitor.JSArray
 import com.getcapacitor.JSObject
 import com.getcapacitor.Plugin
 import com.getcapacitor.PluginCall
+import com.getcapacitor.PluginException
 import com.getcapacitor.PluginMethod
+import com.getcapacitor.PluginThread
 import com.getcapacitor.annotation.CapacitorPlugin
 import com.getcapacitor.annotation.Permission
 import com.google.android.gms.maps.MapsInitializer
@@ -35,6 +37,10 @@ public class CapacitorGoogleMaps :
     private var delegateTouchEventsToMapId: String? = null
 
     private fun findMapView(mapId: String?): CustomMapView? = mapId?.let { customMapViews[it] }
+
+    // The map views belong to the main thread. The methods that use them run there (PluginThread.MAIN), one after
+    // the other in the order JavaScript called them, so the operations on a map stay ordered.
+    private fun requireMapView(mapId: String?): CustomMapView = findMapView(mapId) ?: throw PluginException("map not found")
 
     @PluginMethod
     public fun elementFromPointResult(call: PluginCall) {
@@ -195,7 +201,7 @@ public class CapacitorGoogleMaps :
         call.resolve()
     }
 
-    @PluginMethod
+    @PluginMethod(thread = PluginThread.MAIN)
     public fun createMap(call: PluginCall) {
         bridge.saveCall(call)
         val callbackId = call.callbackId
@@ -209,110 +215,68 @@ public class CapacitorGoogleMaps :
         val mapPreferences = MapPreferences()
         mapPreferences.updateFromJSObject(call.getObject("preferences"))
 
-        activity.runOnUiThread {
-            val customMapView = CustomMapView(activity, this)
+        val customMapView = CustomMapView(activity, this)
 
-            customMapViews[customMapView.id] = customMapView
+        customMapViews[customMapView.id] = customMapView
 
-            customMapView.createMap(callbackId, boundingRect, mapCameraPosition, mapPreferences)
+        customMapView.createMap(callbackId, boundingRect, mapCameraPosition, mapPreferences)
 
-            customMapView.addToView(bridge.webView.parent as ViewGroup)
+        customMapView.addToView(bridge.webView.parent as ViewGroup)
 
-            // Bring the WebView in front of the MapView
-            // This allows us to overlay the MapView in HTML/CSS
-            bridge.webView.bringToFront()
+        // Bring the WebView in front of the MapView
+        // This allows us to overlay the MapView in HTML/CSS
+        bridge.webView.bringToFront()
 
-            // Hide the background
-            bridge.webView.setBackgroundColor(Color.TRANSPARENT)
-            bridge.webView.loadUrl("javascript:document.documentElement.style.backgroundColor = 'transparent';void(0);")
-        }
+        // Hide the background
+        bridge.webView.setBackgroundColor(Color.TRANSPARENT)
+        bridge.webView.loadUrl("javascript:document.documentElement.style.backgroundColor = 'transparent';void(0);")
     }
 
-    @PluginMethod
+    @PluginMethod(thread = PluginThread.MAIN)
     public fun updateMap(call: PluginCall) {
-        val mapId = call.getString("mapId")
+        val customMapView = requireMapView(call.getString("mapId"))
 
-        activity.runOnUiThread {
-            val customMapView = findMapView(mapId)
+        customMapView.mapPreferences.updateFromJSObject(call.getObject("preferences"))
 
-            if (customMapView != null) {
-                customMapView.mapPreferences.updateFromJSObject(call.getObject("preferences"))
-
-                call.resolve(customMapView.invalidateMap())
-            } else {
-                call.reject("map not found")
-            }
-        }
+        call.resolve(customMapView.invalidateMap())
     }
 
-    @PluginMethod
+    @PluginMethod(thread = PluginThread.MAIN)
     public fun getMap(call: PluginCall) {
-        val mapId = call.getString("mapId")
+        val customMapView = requireMapView(call.getString("mapId"))
 
-        activity.runOnUiThread {
-            val customMapView = findMapView(mapId)
-
-            if (customMapView != null) {
-                call.resolve(customMapView.getMap())
-            } else {
-                call.reject("map not found")
-            }
-        }
+        call.resolve(customMapView.getMap())
     }
 
-    @PluginMethod(returnType = PluginMethod.RETURN_NONE)
+    @PluginMethod(returnType = PluginMethod.RETURN_NONE, thread = PluginThread.MAIN)
     public fun removeMap(call: PluginCall) {
-        val mapId = call.getString("mapId")
+        val customMapView = requireMapView(call.getString("mapId"))
 
-        activity.runOnUiThread {
-            val customMapView = findMapView(mapId)
-
-            if (customMapView != null) {
-                customMapView.removeFromView(bridge.webView.parent as ViewGroup)
-                customMapViews.remove(customMapView.id)
-                call.resolve()
-            } else {
-                call.reject("map not found")
-            }
-        }
+        customMapView.removeFromView(bridge.webView.parent as ViewGroup)
+        customMapViews.remove(customMapView.id)
+        call.resolve()
     }
 
-    @PluginMethod(returnType = PluginMethod.RETURN_NONE)
+    @PluginMethod(returnType = PluginMethod.RETURN_NONE, thread = PluginThread.MAIN)
     public fun clearMap(call: PluginCall) {
-        val mapId = call.getString("mapId")
+        val customMapView = requireMapView(call.getString("mapId"))
 
-        activity.runOnUiThread {
-            val customMapView = findMapView(mapId)
-
-            if (customMapView != null) {
-                customMapView.clear()
-                call.resolve()
-            } else {
-                call.reject("map not found")
-            }
-        }
+        customMapView.clear()
+        call.resolve()
     }
 
-    @PluginMethod
+    @PluginMethod(thread = PluginThread.MAIN)
     public fun moveCamera(call: PluginCall) {
-        val mapId = call.getString("mapId")
+        val customMapView = requireMapView(call.getString("mapId"))
 
-        activity.runOnUiThread {
-            val customMapView = findMapView(mapId)
+        val useCurrentCameraPositionAsBase = call.getBoolean("useCurrentCameraPositionAsBase", true) == true
+        val currentCameraPosition = if (useCurrentCameraPositionAsBase) customMapView.cameraPosition else null
 
-            if (customMapView != null) {
-                val useCurrentCameraPositionAsBase = call.getBoolean("useCurrentCameraPositionAsBase", true) == true
-                val currentCameraPosition = if (useCurrentCameraPositionAsBase) customMapView.cameraPosition else null
+        customMapView.mapCameraPosition.updateFromJSObject(call.getObject("cameraPosition"), currentCameraPosition)
 
-                customMapView.mapCameraPosition.updateFromJSObject(call.getObject("cameraPosition"), currentCameraPosition)
+        customMapView.moveCamera(call.getInt("duration", 0))
 
-                customMapView.moveCamera(call.getInt("duration", 0))
-
-                call.resolve()
-            } else {
-                call.reject("map not found")
-            }
-        }
+        call.resolve()
     }
 
     override fun onMapReady(callbackId: String?, result: JSObject?) {
@@ -322,76 +286,79 @@ public class CapacitorGoogleMaps :
         bridge.releaseCall(call)
     }
 
-    @PluginMethod(returnType = PluginMethod.RETURN_CALLBACK)
+    @PluginMethod(returnType = PluginMethod.RETURN_CALLBACK, thread = PluginThread.MAIN)
     public fun didTapInfoWindow(call: PluginCall) {
         setCallbackIdForEvent(call, CustomMapView.EVENT_DID_TAP_INFO_WINDOW)
     }
 
-    @PluginMethod(returnType = PluginMethod.RETURN_CALLBACK)
+    @PluginMethod(returnType = PluginMethod.RETURN_CALLBACK, thread = PluginThread.MAIN)
     public fun didCloseInfoWindow(call: PluginCall) {
         setCallbackIdForEvent(call, CustomMapView.EVENT_DID_CLOSE_INFO_WINDOW)
     }
 
-    @PluginMethod(returnType = PluginMethod.RETURN_CALLBACK)
+    @PluginMethod(returnType = PluginMethod.RETURN_CALLBACK, thread = PluginThread.MAIN)
     public fun didTapMap(call: PluginCall) {
         setCallbackIdForEvent(call, CustomMapView.EVENT_DID_TAP_MAP)
     }
 
-    @PluginMethod(returnType = PluginMethod.RETURN_CALLBACK)
+    @PluginMethod(returnType = PluginMethod.RETURN_CALLBACK, thread = PluginThread.MAIN)
     public fun didLongPressMap(call: PluginCall) {
         setCallbackIdForEvent(call, CustomMapView.EVENT_DID_LONG_PRESS_MAP)
     }
 
-    @PluginMethod(returnType = PluginMethod.RETURN_CALLBACK)
+    @PluginMethod(returnType = PluginMethod.RETURN_CALLBACK, thread = PluginThread.MAIN)
     public fun didTapMarker(call: PluginCall) {
         setCallbackIdForEvent(call, CustomMapView.EVENT_DID_TAP_MARKER)
     }
 
-    @PluginMethod(returnType = PluginMethod.RETURN_CALLBACK)
+    @PluginMethod(returnType = PluginMethod.RETURN_CALLBACK, thread = PluginThread.MAIN)
     public fun didBeginDraggingMarker(call: PluginCall) {
         setCallbackIdForEvent(call, CustomMapView.EVENT_DID_BEGIN_DRAGGING_MARKER)
     }
 
-    @PluginMethod(returnType = PluginMethod.RETURN_CALLBACK)
+    @PluginMethod(returnType = PluginMethod.RETURN_CALLBACK, thread = PluginThread.MAIN)
     public fun didDragMarker(call: PluginCall) {
         setCallbackIdForEvent(call, CustomMapView.EVENT_DID_DRAG_MARKER)
     }
 
-    @PluginMethod(returnType = PluginMethod.RETURN_CALLBACK)
+    @PluginMethod(returnType = PluginMethod.RETURN_CALLBACK, thread = PluginThread.MAIN)
     public fun didEndDraggingMarker(call: PluginCall) {
         setCallbackIdForEvent(call, CustomMapView.EVENT_DID_END_DRAGGING_MARKER)
     }
 
-    @PluginMethod(returnType = PluginMethod.RETURN_CALLBACK)
+    @PluginMethod(returnType = PluginMethod.RETURN_CALLBACK, thread = PluginThread.MAIN)
     public fun didTapMyLocationButton(call: PluginCall) {
         setCallbackIdForEvent(call, CustomMapView.EVENT_DID_TAP_MY_LOCATION_BUTTON)
     }
 
-    @PluginMethod(returnType = PluginMethod.RETURN_CALLBACK)
+    @PluginMethod(returnType = PluginMethod.RETURN_CALLBACK, thread = PluginThread.MAIN)
     public fun didTapMyLocationDot(call: PluginCall) {
         setCallbackIdForEvent(call, CustomMapView.EVENT_DID_TAP_MY_LOCATION_DOT)
     }
 
-    @PluginMethod(returnType = PluginMethod.RETURN_CALLBACK)
+    @PluginMethod(returnType = PluginMethod.RETURN_CALLBACK, thread = PluginThread.MAIN)
     public fun didTapPoi(call: PluginCall) {
         setCallbackIdForEvent(call, CustomMapView.EVENT_DID_TAP_POI)
     }
 
-    @PluginMethod(returnType = PluginMethod.RETURN_CALLBACK)
+    @PluginMethod(returnType = PluginMethod.RETURN_CALLBACK, thread = PluginThread.MAIN)
     public fun didBeginMovingCamera(call: PluginCall) {
         setCallbackIdForEvent(call, CustomMapView.EVENT_DID_BEGIN_MOVING_CAMERA)
     }
 
-    @PluginMethod(returnType = PluginMethod.RETURN_CALLBACK)
+    @PluginMethod(returnType = PluginMethod.RETURN_CALLBACK, thread = PluginThread.MAIN)
     public fun didMoveCamera(call: PluginCall) {
         setCallbackIdForEvent(call, CustomMapView.EVENT_DID_MOVE_CAMERA)
     }
 
-    @PluginMethod(returnType = PluginMethod.RETURN_CALLBACK)
+    @PluginMethod(returnType = PluginMethod.RETURN_CALLBACK, thread = PluginThread.MAIN)
     public fun didEndMovingCamera(call: PluginCall) {
         setCallbackIdForEvent(call, CustomMapView.EVENT_DID_END_MOVING_CAMERA)
     }
 
+    /**
+     * Keeps [call] alive and sends it the [eventName] events of the map it names. Call on the main thread.
+     */
     public fun setCallbackIdForEvent(call: PluginCall, eventName: String) {
         call.keepAlive = true
         val callbackId = call.callbackId
@@ -401,9 +368,7 @@ public class CapacitorGoogleMaps :
         if (customMapView != null) {
             val preventDefault = call.getBoolean("preventDefault", false)
 
-            activity.runOnUiThread {
-                customMapView.setCallbackIdForEvent(callbackId, eventName, preventDefault)
-            }
+            customMapView.setCallbackIdForEvent(callbackId, eventName, preventDefault)
         }
     }
 
@@ -411,92 +376,60 @@ public class CapacitorGoogleMaps :
         bridge.getSavedCall(callbackId)?.resolve(result)
     }
 
-    @PluginMethod
+    @PluginMethod(thread = PluginThread.MAIN)
     public fun addMarker(call: PluginCall) {
         val mapId = call.getString("mapId")
+        val customMapView = requireMapView(mapId)
 
-        activity.runOnUiThread {
-            val customMapView = findMapView(mapId)
+        val customMarker = CustomMarker()
+        customMarker.updateFromJSObject(call.data)
 
-            if (customMapView != null) {
-                val customMarker = CustomMarker()
-                customMarker.updateFromJSObject(call.data)
-
-                customMapView.addMarker(customMarker) { marker ->
-                    call.resolve(CustomMarker.getResultForMarker(marker, mapId))
-                }
-            } else {
-                call.reject("map not found")
-            }
+        customMapView.addMarker(customMarker) { marker ->
+            call.resolve(CustomMarker.getResultForMarker(marker, mapId))
         }
     }
 
+    // Stays on the plugin thread: MarkersAppender blocks it while it builds the markers, and adds them to the map
+    // from a thread of its own.
     @PluginMethod
     public fun addMarkers(call: PluginCall) {
-        val customMapView = findMapView(call.getString("mapId"))
-        if (customMapView == null) {
-            call.reject("map not found")
-            return
-        }
+        val customMapView = requireMapView(call.getString("mapId"))
         try {
             val jsMarkers = call.getArray("markers", JSArray()) ?: JSArray()
             MarkersAppender().addMarkers(customMapView, jsMarkers, activity) { call.resolve(it) }
         } catch (e: MarkersAppender.AppenderException) {
-            call.reject("exception in addMarkers", ex = e)
+            throw PluginException("exception in addMarkers", cause = e)
         }
     }
 
-    @PluginMethod(returnType = PluginMethod.RETURN_NONE)
+    @PluginMethod(returnType = PluginMethod.RETURN_NONE, thread = PluginThread.MAIN)
     public fun removeMarker(call: PluginCall) {
-        val mapId = call.getString("mapId")
+        val customMapView = requireMapView(call.getString("mapId"))
 
-        activity.runOnUiThread {
-            val customMapView = findMapView(mapId)
+        customMapView.removeMarker(call.getString("markerId"))
 
-            if (customMapView != null) {
-                customMapView.removeMarker(call.getString("markerId"))
-
-                call.resolve()
-            } else {
-                call.reject("map not found")
-            }
-        }
+        call.resolve()
     }
 
-    @PluginMethod
+    @PluginMethod(thread = PluginThread.MAIN)
     public fun addPolygon(call: PluginCall) {
         val mapId = call.getString("mapId")
+        val customMapView = requireMapView(mapId)
 
-        activity.runOnUiThread {
-            val customMapView = findMapView(mapId)
+        val customPolygon = CustomPolygon()
+        customPolygon.updateFromJSObject(call.data)
 
-            if (customMapView != null) {
-                val customPolygon = CustomPolygon()
-                customPolygon.updateFromJSObject(call.data)
-
-                customMapView.addPolygon(customPolygon) { polygon ->
-                    call.resolve(customPolygon.getResultForPolygon(polygon, mapId))
-                }
-            } else {
-                call.reject("map not found")
-            }
+        customMapView.addPolygon(customPolygon) { polygon ->
+            call.resolve(customPolygon.getResultForPolygon(polygon, mapId))
         }
     }
 
-    @PluginMethod(returnType = PluginMethod.RETURN_NONE)
+    @PluginMethod(returnType = PluginMethod.RETURN_NONE, thread = PluginThread.MAIN)
     public fun removePolygon(call: PluginCall) {
-        val mapId = call.getString("mapId")
+        val customMapView = requireMapView(call.getString("mapId"))
 
-        activity.runOnUiThread {
-            val customMapView = findMapView(mapId)
+        customMapView.removePolygon(call.getString("polygonId"))
 
-            if (customMapView != null) {
-                customMapView.removePolygon(call.getString("polygonId"))
-
-                call.resolve()
-            } else {
-                call.reject("map not found")
-            }
-        }
+        call.resolve()
     }
 }
